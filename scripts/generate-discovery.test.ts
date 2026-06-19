@@ -1,13 +1,16 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  type EndpointDef,
   MPP_REALM,
   type ServiceDef,
+  STRIPE_PAYMENT,
   TEMPO_PAYMENT,
   USDC,
 } from "../schemas/services.ts";
 import {
   buildEndpointDocs,
   buildPayment,
+  buildService,
   parseRoute,
   validateServices,
 } from "./generate-discovery.ts";
@@ -310,5 +313,97 @@ describe("service registry integrity", () => {
 
   it("passes all validation rules", () => {
     expect(() => validateServices(allServices)).not.toThrow();
+  });
+});
+
+describe("buildPayment per-endpoint rail override", () => {
+  const svc = {
+    intent: "charge",
+    payment: STRIPE_PAYMENT,
+  } as unknown as ServiceDef;
+
+  it("uses the endpoint payment override when present", () => {
+    const ep = {
+      route: "POST /api/mpp/v1/search",
+      desc: "Search",
+      amount: "12000",
+      unitType: "request",
+      payment: TEMPO_PAYMENT,
+    } as EndpointDef;
+    const p = buildPayment(ep, svc);
+    expect(p?.method).toBe("tempo");
+    expect(p?.decimals).toBe(6);
+    expect(p?.currency).toBe(TEMPO_PAYMENT.currency);
+    expect(p?.amount).toBe("12000");
+  });
+
+  it("falls back to the service payment when no override", () => {
+    const ep = {
+      route: "POST /api/mpp/v1/visualize",
+      desc: "Visualize",
+      amount: "4",
+      unitType: "request",
+    } as EndpointDef;
+    const p = buildPayment(ep, svc);
+    expect(p?.method).toBe("stripe");
+    expect(p?.decimals).toBe(2);
+  });
+});
+
+describe("buildService methods aggregation (mixed rails)", () => {
+  function makeSvc(endpoints: EndpointDef[]): ServiceDef {
+    return {
+      id: "tako",
+      name: "Tako",
+      url: "https://tako.com",
+      serviceUrl: "https://tako.com",
+      description: "d",
+      categories: ["data"],
+      integration: "first-party",
+      tags: [],
+      realm: "tako.com",
+      intent: "charge",
+      payment: STRIPE_PAYMENT,
+      endpoints,
+    };
+  }
+
+  it("advertises every rail used by endpoints", () => {
+    const svc = makeSvc([
+      {
+        route: "POST /api/mpp/v1/reports/generate",
+        desc: "r",
+        amount: "550",
+        unitType: "request",
+      },
+      {
+        route: "POST /api/mpp/v1/search",
+        desc: "s",
+        amount: "12000",
+        unitType: "request",
+        payment: TEMPO_PAYMENT,
+      },
+    ]);
+    const out = buildService(svc);
+    const methods = out.methods as Record<
+      string,
+      { intents: string[]; assets: string[] }
+    >;
+    expect(Object.keys(methods).sort()).toEqual(["stripe", "tempo"]);
+    expect(methods.stripe.assets).toContain(STRIPE_PAYMENT.currency);
+    expect(methods.tempo.assets).toContain(TEMPO_PAYMENT.currency);
+  });
+
+  it("keeps single-rail output when no overrides", () => {
+    const svc = makeSvc([
+      {
+        route: "POST /api/mpp/v1/visualize",
+        desc: "v",
+        amount: "4",
+        unitType: "request",
+      },
+    ]);
+    const methods = buildService(svc).methods as Record<string, unknown>;
+    expect(Object.keys(methods)).toEqual(["stripe"]);
   });
 });

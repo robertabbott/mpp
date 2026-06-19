@@ -75,11 +75,12 @@ export function buildPayment(
 ): Record<string, unknown> | null {
   if (!ep.amount && !ep.dynamic) return null;
 
+  const pay = ep.payment ?? svc.payment;
   const base: Record<string, unknown> = {
     intent: ep.intent ?? svc.intent,
-    method: svc.payment.method,
-    currency: svc.payment.currency,
-    decimals: svc.payment.decimals,
+    method: pay.method,
+    currency: pay.currency,
+    decimals: pay.decimals,
     description: ep.desc,
   };
 
@@ -166,15 +167,6 @@ export function validateServices(svcs: ServiceDef[]): void {
 }
 
 export function buildService(svc: ServiceDef): Record<string, unknown> {
-  // Collect intents from paid endpoints
-  const intents = new Set<string>();
-  for (const ep of svc.endpoints) {
-    if (ep.amount || ep.dynamic) {
-      intents.add(ep.intent ?? svc.intent);
-    }
-  }
-  if (intents.size === 0) intents.add(svc.intent);
-
   const entry: Record<string, unknown> = {
     id: svc.id,
     name: svc.name,
@@ -188,12 +180,37 @@ export function buildService(svc: ServiceDef): Record<string, unknown> {
   entry.tags = svc.tags;
   entry.status = svc.status ?? "active";
   if (svc.docs) entry.docs = svc.docs;
-  entry.methods = {
-    [svc.payment.method]: {
-      intents: [...intents].sort(),
-      assets: [svc.payment.currency],
-    },
-  };
+
+  // Aggregate supported payment methods across endpoints. Per-endpoint payment
+  // overrides let one service mix rails (e.g. Stripe + Tempo); each method
+  // advertises only the intents and assets actually used by its endpoints.
+  const methodAgg: Record<
+    string,
+    { intents: Set<string>; assets: Set<string> }
+  > = {};
+  for (const ep of svc.endpoints) {
+    if (!ep.amount && !ep.dynamic) continue;
+    const pay = ep.payment ?? svc.payment;
+    if (methodAgg[pay.method] === undefined) {
+      methodAgg[pay.method] = { intents: new Set(), assets: new Set() };
+    }
+    const agg = methodAgg[pay.method];
+    agg.intents.add(ep.intent ?? svc.intent);
+    agg.assets.add(pay.currency);
+  }
+  if (Object.keys(methodAgg).length === 0) {
+    methodAgg[svc.payment.method] = {
+      intents: new Set([svc.intent]),
+      assets: new Set([svc.payment.currency]),
+    };
+  }
+  entry.methods = Object.fromEntries(
+    Object.entries(methodAgg).map(([method, agg]) => [
+      method,
+      { intents: [...agg.intents].sort(), assets: [...agg.assets] },
+    ]),
+  );
+
   entry.realm = svc.realm;
   if (svc.provider) entry.provider = svc.provider;
 
