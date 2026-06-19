@@ -5549,10 +5549,25 @@ export const services: ServiceDef[] = [
     payment: STRIPE_PAYMENT,
     endpoints: [
       {
-        route: "POST /api/mpp/v1/search/fast",
-        desc: "Fast data search across datasets",
-        amount: "4",
+        route: "POST /api/mpp/v1/search",
+        desc: "Search across Tako data and the web",
+        amount: "12000",
         unitType: "request",
+        payment: TEMPO_PAYMENT,
+      },
+      {
+        route: "POST /api/mpp/v1/answer",
+        desc: "Answer a question with cited synthesis",
+        amount: "18000",
+        unitType: "request",
+        payment: TEMPO_PAYMENT,
+      },
+      {
+        route: "POST /api/mpp/v1/contents",
+        desc: "Download the content behind a search result (default; varies by content)",
+        amount: "2000",
+        unitType: "request",
+        payment: TEMPO_PAYMENT,
       },
       {
         route: "POST /api/mpp/v1/visualize",
@@ -5565,26 +5580,6 @@ export const services: ServiceDef[] = [
         desc: "Create an embeddable ThinViz card",
         amount: "1",
         unitType: "request",
-      },
-      {
-        route: "POST /api/mpp/v1/search/deep",
-        desc: "Deep async data search with AI research agent",
-        amount: "55",
-        unitType: "request",
-      },
-      {
-        route: "GET /api/mpp/v1/search/deep/status",
-        desc: "Poll status for async deep search",
-      },
-      {
-        route: "POST /api/mpp/v1/threads/deep",
-        desc: "Deep async knowledge search with full pipeline",
-        amount: "55",
-        unitType: "request",
-      },
-      {
-        route: "GET /api/mpp/v1/threads/status",
-        desc: "Poll status for async knowledge search",
       },
       {
         route: "POST /api/mpp/v1/reports/generate",
