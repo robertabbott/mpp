@@ -91,6 +91,8 @@ export interface EndpointDef {
   unitType?: string;
   /** Explicit docs URL override, or false to suppress auto-generated URL */
   docs?: string | false;
+  /** Override the service-level payment rail (method/currency/decimals) for this endpoint. */
+  payment?: PaymentDefaults;
 }
 
 export interface ServiceDef {
